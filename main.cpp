@@ -176,11 +176,11 @@ int main(void)
 	imgResult = cv::Scalar(0) ;
 	for( int iy=0 ; iy<100 ; iy++ )
 	{
-		cv::circle(imgResult, cv::Point(x[iy]*interval, y[iy]*interval) ,3, cv::Scalar(0,0,255), CV_FILLED) ;
+		cv::circle(imgResult, cv::Point(x[iy]*interval, y[iy]*interval) ,3, cv::Scalar(0,0,255), cv::FILLED) ;
 
 		double data = F.at<double>(iy,0) ;
 
-		cv::circle(imgResult, cv::Point(x[iy]*interval, data*interval) ,1, cv::Scalar(0,255,0), CV_FILLED) ;
+		cv::circle(imgResult, cv::Point(x[iy]*interval, data*interval) ,1, cv::Scalar(0,255,0), cv::FILLED) ;
 	}
 	cv::imshow("result", imgResult) ;
 	cv::waitKey(0) ;
