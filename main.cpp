@@ -23,55 +23,35 @@ int main(void)
 	const static float c3 = 1.f / c1;
 
 	double noise_sigma = 1 ;
-	double x[100] ;
-	double y[100] ;
+
+    cv::Point2f vals[100];
 
 	double iA = 0.005 ;
 	double iB = 0.5 ;
 	double iC = 0 ;
 	for( int i=0 ; i<100 ; i++ )
 	{
-		x[i] = i ;
-		y[i] = iA*(x[i]*x[i]) + iB*x[i] + iC ;
+        const auto x = i;
+
+		//x[i] = i ;
+		//y[i] = iA*(x[i]*x[i]) + iB*x[i] + iC ;
+        vals[i] = { float(i), float(iA*(x * x) + iB * x + iC) };
 
 #if 1
 		if( i > 50 && i < 70 )
 		{
-			y[i] += 0.5*abs(x[i]);
+            vals[i].y += 0.5*abs(x);
 		}
 #endif
-		//y[i] = y[i] + noise_sigma*((rand()%100)+1) ;
 		    
 		random = ((float)rand() / (float)(RAND_MAX + 1));
 		noise = (2.f * ((random * c2) + (random * c2) + (random * c2)) - 3.f * (c2 - 1.f)) * c3;
 
 		int noise_scale = 2.0 ;
 		if( i > 50 && i<70 ) noise_scale = 5.0 ;
-		y[i] = y[i] + noise*noise_scale ;
+        vals[i].y += noise*noise_scale ;
 	}
 
-
-	//-------------------------------------------------------------- build matrix
-	cv::Mat A(100, 3, CV_64FC1) ;
-	cv::Mat B(100,1, CV_64FC1) ;
-
-	for( int i=0 ; i<100 ; i++ )
-	{
-		A.at<double>(i,0) = x[i] * x[i] ;
-	}
-	for( int i=0 ; i<100 ; i++ )
-	{
-		A.at<double>(i,1) = x[i] ;
-	}
-	for( int i=0 ; i<100 ; i++ )
-	{
-		A.at<double>(i,2) = 1.0 ;
-	}
-
-	for( int i=0 ; i<100 ; i++ )
-	{
-		B.at<double>(i,0) = y[i] ;
-	}
 
 	//-------------------------------------------------------------- RANSAC fitting 
 	int n_data = 100 ;
@@ -105,11 +85,11 @@ int main(void)
 		cv::Mat BB(3,1, CV_64FC1) ;
 		for( int j=0 ; j<3 ; j++ )
 		{
-			AA.at<double>(j,0) = x[k[j]] * x[k[j]] ;
-			AA.at<double>(j,1) = x[k[j]] ;
+			AA.at<double>(j,0) = vals[k[j]].x * vals[k[j]].x;
+			AA.at<double>(j,1) = vals[k[j]].x;
 			AA.at<double>(j,2) = 1.0 ;
 			
-			BB.at<double>(j,0) = y[k[j]] ;
+			BB.at<double>(j,0) = vals[k[j]].y;
 		}
 
 		cv::Mat AA_pinv(3,3,CV_64FC1) ;
@@ -118,12 +98,12 @@ int main(void)
 		cv::Mat X = AA_pinv * BB ;	
 
 		//evaluation 
-		cv::Mat residual(100,1,CV_64FC1) ;
-		residual = cv::abs(B-A*X) ;
 		int cnt = 0 ;
 		for( int j=0 ; j<100 ; j++ )
 		{
-			double data = residual.at<double>(j,0) ;
+            const auto& v = vals[j];
+
+            double data = std::abs(v.y - (X.at<double>(0, 0) * v.x * v.x + X.at<double>(1, 0) * v.x + X.at<double>(2, 0)));
 			
 			if( data < T ) 
 			{
@@ -139,12 +119,12 @@ int main(void)
 	}
 
 	//------------------------------------------------------------------- optional LS fitting 
-	cv::Mat residual = cv::abs(A*best_model - B) ;
 	std::vector<int> vec_index ;
 	for( int i=0 ; i<100 ; i++ )
 	{
-		double data = residual.at<double>(i, 0) ;
-		if( data < T ) 
+        const auto& v = vals[i];
+        double data = std::abs(v.y - (best_model.at<double>(0, 0) * v.x * v.x + best_model.at<double>(1, 0) * v.x + best_model.at<double>(2, 0)));
+        if( data < T )
 		{
 			vec_index.push_back(i) ;
 		}
@@ -155,11 +135,11 @@ int main(void)
 
 	for( int i=0 ; i<vec_index.size() ; i++ )
 	{
-		A2.at<double>(i,0) = x[vec_index[i]] * x[vec_index[i]]  ;
-		A2.at<double>(i,1) = x[vec_index[i]] ;
+		A2.at<double>(i,0) = vals[vec_index[i]].x * vals[vec_index[i]].x  ;
+		A2.at<double>(i,1) = vals[vec_index[i]].x;
 		A2.at<double>(i,2) = 1.0 ;
 		
-		B2.at<double>(i,0) = y[vec_index[i]] ;
+		B2.at<double>(i,0) = vals[vec_index[i]].y ;
 	}
 
 	cv::Mat A2_pinv(3,vec_index.size(),CV_64FC1) ;
@@ -168,23 +148,20 @@ int main(void)
 	cv::Mat X = A2_pinv * B2 ;
 
 	//Drawing
-	cv::Mat F = A*X ;
-	printf("matrix F : cols =%d, rows=%d\n", F.cols, F.rows) ;
-
 	int interval = 5 ;
 	cv::Mat imgResult(100*interval,100*interval,CV_8UC3) ;
 	imgResult = cv::Scalar(0) ;
 	for( int iy=0 ; iy<100 ; iy++ )
 	{
-		cv::circle(imgResult, cv::Point(x[iy]*interval, y[iy]*interval) ,3, cv::Scalar(0,0,255), cv::FILLED) ;
+        const auto& v = vals[iy];
+        cv::circle(imgResult, cv::Point(v.x*interval, v.y*interval) ,3, cv::Scalar(0,0,255), cv::FILLED) ;
 
-		double data = F.at<double>(iy,0) ;
+        double data = X.at<double>(0, 0) * v.x * v.x + X.at<double>(1, 0) * v.x + X.at<double>(2, 0);
 
-		cv::circle(imgResult, cv::Point(x[iy]*interval, data*interval) ,1, cv::Scalar(0,255,0), cv::FILLED) ;
+		cv::circle(imgResult, cv::Point(v.x*interval, data*interval) ,1, cv::Scalar(0,255,0), cv::FILLED) ;
 	}
 	cv::imshow("result", imgResult) ;
 	cv::waitKey(0) ;
 
 	return 0 ;
 }
-
