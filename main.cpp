@@ -22,7 +22,7 @@ int main(void)
 	const static float c2 = ((int)(c1 / 3)) + 1;
 	const static float c3 = 1.f / c1;
 
-	double noise_sigma = 100 ;
+	double noise_sigma = 1 ;
 	double x[100] ;
 	double y[100] ;
 
@@ -34,10 +34,10 @@ int main(void)
 		x[i] = i ;
 		y[i] = iA*(x[i]*x[i]) + iB*x[i] + iC ;
 
-#if 0
+#if 1
 		if( i > 50 && i < 70 )
 		{
-			y[i] += 0.1*abs(x[i]);
+			y[i] += 0.5*abs(x[i]);
 		}
 #endif
 		//y[i] = y[i] + noise_sigma*((rand()%100)+1) ;
