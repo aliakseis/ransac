@@ -11,7 +11,7 @@
 #include <time.h>
 #include <math.h>
 
-enum { N_SAMPLES = 3 };
+enum { N_SAMPLES = 5 };
 
 double CalcPoly(const cv::Mat& X, double x)
 {
@@ -33,20 +33,20 @@ cv::Mat RansacFitting(const std::vector<cv::Point2f>& vals, double noise_sigma)
 
     //int n_sample = 3;
     int max_cnt = 0;
-    cv::Mat best_model(3, 1, CV_64FC1);
+    cv::Mat best_model(N_SAMPLES, 1, CV_64FC1);
 
     std::default_random_engine dre;
 
     for (int n = 0; n < N; n++)
     {
-        //random sampling - 3 point  
+        //random sampling - N_SAMPLES points
         int k[N_SAMPLES];
         for (int j = 0; j < N_SAMPLES; ++j)
             k[j] = j;
 
         std::map<int, int> displaced;
 
-        // Fisher–Yates shuffle Algorithm
+        // Fisher-Yates shuffle Algorithm
         for (int j = 0; j < N_SAMPLES; ++j)
         {
             std::uniform_int_distribution<int> di(j, vals.size() - 1);
@@ -64,9 +64,9 @@ cv::Mat RansacFitting(const std::vector<cv::Point2f>& vals, double noise_sigma)
         printf("random sample : %d %d %d\n", k[0], k[1], k[2]);
 
         //model estimation
-        cv::Mat AA(3, 3, CV_64FC1);
-        cv::Mat BB(3, 1, CV_64FC1);
-        for (int i = 0; i < 3; i++)
+        cv::Mat AA(N_SAMPLES, N_SAMPLES, CV_64FC1);
+        cv::Mat BB(N_SAMPLES, 1, CV_64FC1);
+        for (int i = 0; i < N_SAMPLES; i++)
         {
             AA.at<double>(i, 0) = 1.;
             double v = 1.;
@@ -79,7 +79,7 @@ cv::Mat RansacFitting(const std::vector<cv::Point2f>& vals, double noise_sigma)
             BB.at<double>(i, 0) = vals[k[i]].y;
         }
 
-        cv::Mat AA_pinv(3, 3, CV_64FC1);
+        cv::Mat AA_pinv(N_SAMPLES, N_SAMPLES, CV_64FC1);
         invert(AA, AA_pinv, cv::DECOMP_SVD);
 
         cv::Mat X = AA_pinv * BB;
@@ -115,7 +115,7 @@ cv::Mat RansacFitting(const std::vector<cv::Point2f>& vals, double noise_sigma)
         }
     }
 
-    cv::Mat A2(vec_index.size(), 3, CV_64FC1);
+    cv::Mat A2(vec_index.size(), N_SAMPLES, CV_64FC1);
     cv::Mat B2(vec_index.size(), 1, CV_64FC1);
 
     for (int i = 0; i < vec_index.size(); i++)
@@ -132,7 +132,7 @@ cv::Mat RansacFitting(const std::vector<cv::Point2f>& vals, double noise_sigma)
         B2.at<double>(i, 0) = vals[vec_index[i]].y;
     }
 
-    cv::Mat A2_pinv(3, vec_index.size(), CV_64FC1);
+    cv::Mat A2_pinv(N_SAMPLES, vec_index.size(), CV_64FC1);
     invert(A2, A2_pinv, cv::DECOMP_SVD);
 
     cv::Mat X = A2_pinv * B2;
@@ -160,14 +160,16 @@ int main(void)
 
     std::vector<cv::Point2f> vals(100);
 
-	double iA = 0.005 ;
+    double iE = -0.000001;
+    double iD = 0.00005;
+    double iC = 0.005 ;
 	double iB = 0.5 ;
-	double iC = 0 ;
+	double iA = 0 ;
 	for( int i=0 ; i<100 ; i++ )
 	{
         const auto x = i;
 
-        vals[i] = { float(i), float(iA*(x * x) + iB * x + iC) };
+        vals[i] = { float(i), float(iE * (x * x * x * x) + iD * (x * x * x) + iC*(x * x) + iB * x + iA) };
 
 #if 1
 		if( i > 50 && i < 70 )
