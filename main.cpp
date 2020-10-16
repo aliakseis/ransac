@@ -13,7 +13,19 @@
 
 enum { N_SAMPLES = 3 };
 
-auto RansacFitting(const std::vector<cv::Point2f>& vals, double noise_sigma)
+double CalcPoly(const cv::Mat& X, double x)
+{
+    double result = X.at<double>(0, 0);
+    double v = 1.;
+    for (int i = 1; i < X.rows; ++i)
+    {
+        v *= x;
+        result += X.at<double>(i, 0) * v;
+    }
+    return result;
+}
+
+cv::Mat RansacFitting(const std::vector<cv::Point2f>& vals, double noise_sigma)
 {
     //int n_data = vals.size();
     int N = 100;	//iterations 
@@ -25,7 +37,7 @@ auto RansacFitting(const std::vector<cv::Point2f>& vals, double noise_sigma)
 
     std::default_random_engine dre;
 
-    for (int i = 0; i < N; i++)
+    for (int n = 0; n < N; n++)
     {
         //random sampling - 3 point  
         int k[N_SAMPLES];
@@ -54,13 +66,17 @@ auto RansacFitting(const std::vector<cv::Point2f>& vals, double noise_sigma)
         //model estimation
         cv::Mat AA(3, 3, CV_64FC1);
         cv::Mat BB(3, 1, CV_64FC1);
-        for (int j = 0; j < 3; j++)
+        for (int i = 0; i < 3; i++)
         {
-            AA.at<double>(j, 0) = vals[k[j]].x * vals[k[j]].x;
-            AA.at<double>(j, 1) = vals[k[j]].x;
-            AA.at<double>(j, 2) = 1.0;
+            AA.at<double>(i, 0) = 1.;
+            double v = 1.;
+            for (int j = 1; j < N_SAMPLES; ++j)
+            {
+                v *= vals[k[i]].x;
+                AA.at<double>(i, j) = v;
+            }
 
-            BB.at<double>(j, 0) = vals[k[j]].y;
+            BB.at<double>(i, 0) = vals[k[i]].y;
         }
 
         cv::Mat AA_pinv(3, 3, CV_64FC1);
@@ -72,7 +88,7 @@ auto RansacFitting(const std::vector<cv::Point2f>& vals, double noise_sigma)
         int cnt = 0;
         for (const auto& v : vals)
         {
-            double data = std::abs(v.y - (X.at<double>(0, 0) * v.x * v.x + X.at<double>(1, 0) * v.x + X.at<double>(2, 0)));
+            double data = std::abs(v.y - CalcPoly(X, v.x));
 
             if (data < T)
             {
@@ -92,7 +108,7 @@ auto RansacFitting(const std::vector<cv::Point2f>& vals, double noise_sigma)
     for (int i = 0; i < vals.size(); i++)
     {
         const auto& v = vals[i];
-        double data = std::abs(v.y - (best_model.at<double>(0, 0) * v.x * v.x + best_model.at<double>(1, 0) * v.x + best_model.at<double>(2, 0)));
+        double data = std::abs(v.y - CalcPoly(best_model, v.x));
         if (data < T)
         {
             vec_index.push_back(i);
@@ -104,9 +120,14 @@ auto RansacFitting(const std::vector<cv::Point2f>& vals, double noise_sigma)
 
     for (int i = 0; i < vec_index.size(); i++)
     {
-        A2.at<double>(i, 0) = vals[vec_index[i]].x * vals[vec_index[i]].x;
-        A2.at<double>(i, 1) = vals[vec_index[i]].x;
-        A2.at<double>(i, 2) = 1.0;
+        A2.at<double>(i, 0) = 1.;
+        double v = 1.;
+        for (int j = 1; j < N_SAMPLES; ++j)
+        {
+            v *= vals[vec_index[i]].x;
+            A2.at<double>(i, j) = v;
+        }
+
 
         B2.at<double>(i, 0) = vals[vec_index[i]].y;
     }
@@ -176,7 +197,7 @@ int main(void)
         const auto& v = vals[iy];
         cv::circle(imgResult, cv::Point(v.x*interval, v.y*interval) ,3, cv::Scalar(0,0,255), cv::FILLED) ;
 
-        double data = X.at<double>(0, 0) * v.x * v.x + X.at<double>(1, 0) * v.x + X.at<double>(2, 0);
+        double data = CalcPoly(X, v.x);
 
 		cv::circle(imgResult, cv::Point(v.x*interval, data*interval) ,1, cv::Scalar(0,255,0), cv::FILLED) ;
 	}
