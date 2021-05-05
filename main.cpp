@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <opencv2/opencv.hpp>
 
+#include <ceres/ceres.h>
+
 #include <iostream>
 #include <string>
 #include <map>
@@ -138,6 +140,83 @@ cv::Mat RansacFitting(const std::vector<cv::Point2f>& vals, int n_samples, doubl
     return X;
 }
 
+//////////////////////////////////////////////////////////////////////////////
+
+struct PolynomialResidual {
+    PolynomialResidual(double x, double y, int n_samples) : x_(x), y_(y), n_samples_(n_samples) {}
+
+    template <typename T>
+    bool operator()(T const* const* relative_poses, T* residuals) const {
+
+        T y = *(relative_poses[0]) + *(relative_poses[1]) * x_;
+        for (int i = 2; i < n_samples_; ++i) y += *(relative_poses[i]) * std::pow(x_, i);
+
+        residuals[0] = T(y_) - y;
+        return true;
+    }
+
+private:
+    // Observations for a sample.
+    const double x_;
+    const double y_;
+    int n_samples_;
+};
+
+
+cv::Mat CeresFitting(const std::vector<cv::Point2f>& vals, int n_samples, double arctanLoss)
+{
+    cv::Mat A = cv::Mat::zeros(n_samples, 1, CV_64FC1);
+
+    std::vector<double*> params;
+    params.reserve(n_samples);
+    for (int i = 0; i < n_samples; ++i) params.push_back(&A.at<double>(i, 0));
+
+    ceres::Problem problem;
+    for (auto& i : vals) {
+        auto cost_function =
+            new ceres::DynamicAutoDiffCostFunction<PolynomialResidual>(new PolynomialResidual(i.x, i.y, n_samples));
+
+        for (int j = 0; j < params.size(); ++j) cost_function->AddParameterBlock(1);
+
+        cost_function->SetNumResiduals(1);
+
+        problem.AddResidualBlock(cost_function, new ceres::ArctanLoss(arctanLoss), params);
+    }
+
+    ceres::Solver::Options options;
+    options.linear_solver_type = ceres::DENSE_QR;
+    options.minimizer_progress_to_stdout = true;
+
+    options.max_num_iterations = 50;
+
+    options.logging_type = ceres::SILENT;
+
+    ceres::Solver::Summary summary;
+    Solve(options, &problem, &summary);
+
+    return A;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+
+void DrawResult(const cv::Mat& X, const std::vector<cv::Point2f>& vals, const cv::String& name)
+{
+    //Drawing
+    int interval = 5;
+    cv::Mat imgResult(100 * interval, 100 * interval, CV_8UC3);
+    imgResult = cv::Scalar(0);
+    for (const auto& v : vals)
+    {
+        cv::circle(imgResult, cv::Point(v.x*interval, v.y*interval), 3, cv::Scalar(0, 0, 255), cv::FILLED);
+
+        double data = CalcPoly(X, v.x);
+
+        cv::circle(imgResult, cv::Point(v.x*interval, data*interval), 1, cv::Scalar(0, 255, 0), cv::FILLED);
+    }
+    cv::imshow(name, imgResult);
+
+}
+
 
 int main(void)
 {
@@ -154,7 +233,8 @@ int main(void)
 	const static float c2 = ((int)(c1 / 3)) + 1;
 	const static float c3 = 1.f / c1;
 
-	double noise_sigma = 1 ;
+	const double noise_sigma = 1;
+    const double arctanLoss = 5;
 
     std::vector<cv::Point2f> vals(100);
 
@@ -186,22 +266,10 @@ int main(void)
 
 
 	//-------------------------------------------------------------- RANSAC fitting 
-    auto X = RansacFitting(vals, 5, noise_sigma);
+    DrawResult(RansacFitting(vals, 5, noise_sigma), vals, "RANSAC");
+    //-------------------------------------------------------------- Ceres fitting 
+    DrawResult(CeresFitting(vals, 5, arctanLoss), vals, "Ceres");
 
-	//Drawing
-	int interval = 5 ;
-	cv::Mat imgResult(100*interval,100*interval,CV_8UC3) ;
-	imgResult = cv::Scalar(0) ;
-	for( int iy=0 ; iy<100 ; iy++ )
-	{
-        const auto& v = vals[iy];
-        cv::circle(imgResult, cv::Point(v.x*interval, v.y*interval) ,3, cv::Scalar(0,0,255), cv::FILLED) ;
-
-        double data = CalcPoly(X, v.x);
-
-		cv::circle(imgResult, cv::Point(v.x*interval, data*interval) ,1, cv::Scalar(0,255,0), cv::FILLED) ;
-	}
-	cv::imshow("result", imgResult) ;
 	cv::waitKey(0) ;
 
 	return 0 ;
